@@ -11,6 +11,7 @@ import android.location.Geocoder;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.RemoteException;
 import android.provider.ContactsContract;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -21,6 +22,7 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -54,31 +56,22 @@ public class MainActivity extends AppCompatActivity implements
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 10;
     private final static int CONNECTION_FAILURE_RESOLUTION_REQUEST = 9000;
 
+    private ProgressBar mProgressBar;
+    private ImageView mIconImageView;
+
 
     private CurrentWeather mCurrentWeather;
-    private ImageView mIconImageView;
-    String apiKey = "6502de5433f9f1851ce385599cbc56f4";
-    double latitude = -20.766653;
-    double longitude = -49.705867;
+    private String apiKey = "6502de5433f9f1851ce385599cbc56f4";
     private GoogleApiClient mGoogleApiClient;
     private LocationRequest mLocationRequest;
     private Location mLocation;
-    private LocationListener mLocationListener;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        buildGoogleApiClient();
 
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .addApi(LocationServices.API)
-                .build();
 
-        mLocationRequest = LocationRequest.create()
-                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-                .setInterval(10 * 1000)        // 10 seconds, in milliseconds
-                .setFastestInterval(1 * 1000); // 1 second, in milliseconds
     }
 
     @Override
@@ -90,22 +83,47 @@ public class MainActivity extends AppCompatActivity implements
     @Override
     protected void onPause() {
         super.onPause();
-        if(mGoogleApiClient.isConnected()){
+        if (mGoogleApiClient.isConnected()) {
             mGoogleApiClient.disconnect();
         }
 
     }
 
     public void refreshData(View view) {
-        getForecastData();
+        handleLocation();
     }
 
-    private void getForecastData() {
+    public void handleLocation(){
+        onConnected(null);
+        getForecastData(mLocation);
+    }
+
+
+    protected synchronized void buildGoogleApiClient() {
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(LocationServices.API)
+                .build();
+
+        mLocationRequest = LocationRequest.create()
+                .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                .setInterval(10 * 1000)        // 10 seconds, in milliseconds
+                .setFastestInterval(1 * 1000); // 1 second, in milliseconds
+
+
+    }
+
+    private void getForecastData(Location location) {
         final ActivityMainBinding binding = DataBindingUtil.setContentView(this, R.layout.activity_main);
 
-        double latitude = mLocation.getLatitude();
-        double longitude = mLocation.getLongitude();
+        final double latitude = location.getLatitude();
+        final double longitude = location.getLongitude();
         mIconImageView = findViewById(R.id.iconImageView);
+        mProgressBar = findViewById(R.id.progressBar50);
+        binding.setIsVisible(false);
+
+
         final String url = "https://api.darksky.net/forecast/"
                 + apiKey + "/" + latitude + "," + longitude;
 
@@ -133,7 +151,8 @@ public class MainActivity extends AppCompatActivity implements
                         if (response.isSuccessful()) {
 
                             mCurrentWeather = getCurrentDetails(jsonData);
-                            mCurrentWeather.setLocationLabel(getCityName());
+                            mCurrentWeather.setLocationLabel(getCityName(latitude, longitude));
+                            mCurrentWeather.setVisibility(View.VISIBLE);
                             final CurrentWeather displayWeather = new CurrentWeather(
                                     mCurrentWeather.getLocationLabel(),
                                     mCurrentWeather.getIcon(),
@@ -142,15 +161,20 @@ public class MainActivity extends AppCompatActivity implements
                                     mCurrentWeather.getPrecipation(),
                                     mCurrentWeather.getSummary(),
                                     mCurrentWeather.getTimezone(),
-                                    mCurrentWeather.getTime()
+                                    mCurrentWeather.getTime(),
+                                    mCurrentWeather.getVisibility()
                             );
                             binding.setWeather(displayWeather);
+                            binding.setIsVisible(true);
+
 
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
                                     Drawable drawable = getResources().getDrawable(displayWeather.getIconId());
                                     mIconImageView.setImageDrawable(drawable);
+                                    mProgressBar.setVisibility(View.GONE);
+
                                 }
                             });
 
@@ -169,19 +193,37 @@ public class MainActivity extends AppCompatActivity implements
 
     }
 
-    private String getCityName() {
-        String cityName = "empty";
+    private String getCityName(double latitude, double longitude) {
+        String locationDescription = "empty";
         Geocoder geocoder = new Geocoder(this, Locale.getDefault());
         try {
+
             List<Address> addresses = geocoder.getFromLocation(latitude, longitude, 1);
-            cityName =  addresses.get(0).getLocality() + ", " +   addresses.get(0).getCountryName();
-            Log.v(TAG, "nome da cidade e: " + cityName);
-        }catch (IOException e){
+            if (!addresses.isEmpty()) {
+                String cityName;
+                String countryName;
+                if (addresses.get(0).getLocality() != null) {
+                    cityName = addresses.get(0).getLocality() + ", ";
+                } else {
+                    cityName = "";
+                }
+                if (addresses.get(0).getCountryName() != null) {
+                    countryName = addresses.get(0).getCountryName();
+                } else {
+                    countryName = "";
+                }
+
+
+                locationDescription = cityName + countryName;
+            }
+
+
+        } catch (IOException e) {
             Log.e(TAG, "Erro ao pegar endereço");
         }
 
-        return cityName;
 
+        return locationDescription;
 
 
     }
@@ -231,19 +273,19 @@ public class MainActivity extends AppCompatActivity implements
     }
 
 
-
-
-
     @Override
     public void onConnected(@Nullable Bundle bundle) {
 
         if ((ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED)
                 && (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED)) {
 
+
             mLocation = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
 
             if (mLocation != null) {
-                getForecastData();
+                LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
+
+                getForecastData(mLocation);
             } else {
                 LocationServices.FusedLocationApi.requestLocationUpdates(mGoogleApiClient, mLocationRequest, this);
 
@@ -281,7 +323,7 @@ public class MainActivity extends AppCompatActivity implements
 
     @Override
     public void onLocationChanged(Location location) {
-
+        handleLocation();
     }
 
 

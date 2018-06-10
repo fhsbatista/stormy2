@@ -14,6 +14,7 @@ public class CurrentWeather {
     private double precipation;
     private String summary;
     private String timezone;
+    private int visibility;
     private String formattedTime;
 
     public CurrentWeather() {
@@ -21,7 +22,7 @@ public class CurrentWeather {
     }
 
     public CurrentWeather(String locationLabel, String icon,
-                          double temperature, double humidity, double precipation, String summary, String timezone, Long time) {
+                          double temperature, double humidity, double precipation, String summary, String timezone, Long time, int visibility) {
         this.locationLabel = locationLabel;
         this.icon = icon;
         this.temperature = temperature;
@@ -30,6 +31,15 @@ public class CurrentWeather {
         this.summary = summary;
         this.timezone = timezone;
         this.time = time;
+        this.visibility = visibility;
+    }
+
+    public void setVisibility(int visibility) {
+        this.visibility = visibility;
+    }
+
+    public int getVisibility() {
+        return visibility;
     }
 
     public int getIconId(){
